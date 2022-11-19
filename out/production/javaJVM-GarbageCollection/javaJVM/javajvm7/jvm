@@ -1,0 +1,114 @@
+其他引用类型
+最后 我们来介绍一下其他引用类型
+
+我们知道 在java中 如果变量是一个对象类型的 那么它实际上存放的是对象的引用 但是如果是一个基本类型 那么存放的就是基本类的值
+实际上我们平时代码中类似于Object o = new Object()这样的引用类型 细分之后可以称为强引用
+
+我们通过前面的学习可以明确 如果方法中存在这样的强引用类型 现在需要回收强引用所指向的对象 那么要么此方法运行结束 要么引用连接断开 否则被引用的对象是无法判定为可回收的 因为我们说不定后面还要使用它
+
+所以 当JVM内存空间不足时 JVM宁愿抛出OutOfMemoryError使程序异常终止 也不会靠随意回收具有强引用的"存活"对象来解决内存不足的问题
+
+除了强引用之外 java也为我们提供了三种额外的引用类型
+
+软引用
+软引用不像强引用那样不可回收 当JVM认为内存不足时 会试图回收软引用指向的对象 即JVM会确保在抛出OutOfMemoryError之前 清理软引用指向的对象 当然 如果内存充足 那么是不会轻易被回收的
+
+我们可以通过以下方式来创建一个软引用:
+                    public static void main(String[] args) {
+
+                        // 强引用写法: Object obj = new Object();
+                        // 软引用写法:
+                        SoftReference<Object> reference = new SoftReference<>(new Object());
+                        // 使用get方法就可以获取到软引用所指向的对象了
+                        System.out.println(reference.get());
+
+                    }
+
+可以看到软引用存在一个带队列的构造方法 软引用可以和一个引用队列(ReferenceQueue)联合使用 如果软引用所引用的对象被垃圾回收器回收 java虚拟机就会把这个引用加入到与之关联的引用队列中
+
+这里我们来进行一个测试 首先我们需要设定一个参数 来限制最大堆内存为10M 并且打印GC日志:
+                    -XX:+PrintGCDetails -Xms10M -Xmx10M
+
+接着运行以下代码:
+                    public static void main(String[] args) {
+
+                        ReferenceQueue<Object> queue = new ReferenceQueue<>();
+                        SoftReference<Object> reference = new SoftReference<>(new Object(), queue);
+                        System.out.println(reference);
+
+                        try{
+                            List<String> list = new ArrayList<>();
+                            while (true) list.add(new String("yxsnb"));
+                        }catch (Throwable t){
+                            System.out.println("发生了内存溢出！"+t.getMessage());
+                            System.out.println("软引用对象: "+reference.get());
+                            System.out.println(queue.poll());
+                        }
+
+                    }
+
+运行结果如下:
+                    java.lang.ref.SoftReference@232204a1
+                    [GC (Allocation Failure) [PSYoungGen: 3943K->501K(4608K)] 3943K->2362K(15872K), 0.0050615 secs] [Times: user=0.01 sys=0.00, real=0.01 secs]
+                    [GC (Allocation Failure) [PSYoungGen: 3714K->496K(4608K)] 5574K->4829K(15872K), 0.0049642 secs] [Times: user=0.03 sys=0.00, real=0.01 secs]
+                    [GC (Allocation Failure) [PSYoungGen: 3318K->512K(4608K)] 7652K->7711K(15872K), 0.0059440 secs] [Times: user=0.03 sys=0.00, real=0.00 secs]
+                    [GC (Allocation Failure) --[PSYoungGen: 4608K->4608K(4608K)] 11807K->15870K(15872K), 0.0078912 secs] [Times: user=0.05 sys=0.00, real=0.01 secs]
+                    [Full GC (Ergonomics) [PSYoungGen: 4608K->0K(4608K)] [ParOldGen: 11262K->10104K(11264K)] 15870K->10104K(15872K), [Metaspace: 3207K->3207K(1056768K)], 0.0587856 secs] [Times: user=0.24 sys=0.00, real=0.06 secs]
+                    [Full GC (Ergonomics) [PSYoungGen: 4096K->1535K(4608K)] [ParOldGen: 10104K->11242K(11264K)] 14200K->12777K(15872K), [Metaspace: 3207K->3207K(1056768K)], 0.0608198 secs] [Times: user=0.25 sys=0.01, real=0.06 secs]
+                    [Full GC (Ergonomics) [PSYoungGen: 3965K->3896K(4608K)] [ParOldGen: 11242K->11242K(11264K)] 15207K->15138K(15872K), [Metaspace: 3207K->3207K(1056768K)], 0.0972088 secs] [Times: user=0.58 sys=0.00, real=0.10 secs]
+                    [Full GC (Allocation Failure) [PSYoungGen: 3896K->3896K(4608K)] [ParOldGen: 11242K->11225K(11264K)] 15138K->15121K(15872K), [Metaspace: 3207K->3207K(1056768K)], 0.1028222 secs] [Times: user=0.63 sys=0.01, real=0.10 secs]
+                    发生了内存溢出！Java heap space
+                    软引用对象：null
+                    java.lang.ref.SoftReference@232204a1
+                    Heap
+                     PSYoungGen      total 4608K, used 4048K [0x00000007bfb00000, 0x00000007c0000000, 0x00000007c0000000)
+                      eden space 4096K, 98% used [0x00000007bfb00000,0x00000007bfef40a8,0x00000007bff00000)
+                      from space 512K, 0% used [0x00000007bff00000,0x00000007bff00000,0x00000007bff80000)
+                      to   space 512K, 0% used [0x00000007bff80000,0x00000007bff80000,0x00000007c0000000)
+                     ParOldGen       total 11264K, used 11225K [0x00000007bf000000, 0x00000007bfb00000, 0x00000007bfb00000)
+                      object space 11264K, 99% used [0x00000007bf000000,0x00000007bfaf64a8,0x00000007bfb00000)
+                     Metaspace       used 3216K, capacity 4500K, committed 4864K, reserved 1056768K
+                      class space    used 352K, capacity 388K, committed 512K, reserved 1048576K
+
+可以看到 当内存不足时 软引用所指向的对象被回收了 所以get()方法得到的结果为null 并且软引用对象本身被丢进了队列中
+
+弱引用
+弱引用比较引用的生命周期还要短 在进行比较垃圾回收时 不管当前内存空间是否充足 都会回收它的内存
+
+我们可以像这样创建一个弱引用:
+                    public class Main {
+
+                        public static void main(String[] args) {
+
+                            WeakReference<Object> reference = new WeakReference<>(new Object());
+                            System.out.println(reference.get());
+
+                        }
+
+                    }
+
+使用方法和软引用是差不多的 但是如果我们在这之前手动进行一次GC:
+                    public class Main() {
+
+                        public static void main(String[] args) {
+
+                            SoftReference<Object> softReference = new SoftReference<>(new Object());
+                            WeakReference<Object> weakReference = new WeakReference<>(new Object());
+                            System.gc();
+                            System.out.println("软引用对象: " + softReference.get());
+                            System.out.println("弱引用对象: " + weakReference.get());
+
+                        }
+
+                    }
+
+可以看到 弱引用对象直接就被回收了 而软引用对象没有被回收 同样的 它也支持ReferenceQueue 和软引用用法一致 这里就不多做介绍了
+
+    WeakHashMap正是一种类似于弱引用的HashMap类 如果Map中的Key没有其他引用那么此Map会自动丢弃此键值对
+    public class Main {
+
+        public static void main(String[] args) {
+
+        }
+
+    }

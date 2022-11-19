@@ -1,0 +1,90 @@
+最终判定
+虽然在经历了可达性分析算法之后基本可能判定哪些对象能够被回收 但是并不代表此对象一定会被回收 我们依然可以在最终判定阶段对其进行挽留
+
+还记得我们之前讲解Object类提到的finalize()方法吗?
+                    /**
+                     * Called by the garbage collector on an object when garbage collection
+                     * determines that there are no more references to the object.
+                     * A subclass overrides the finalize method to dispose of
+                     * system resources or to perform other cleanup.
+                     * ...
+                     */
+                     protected void finalize() throws Throwable { }
+
+此方法正是最终判定方法 如果子类重写了此方法 那么子类对象在被判定为可回收时 会进行二次确认 也就是执行finalize()方法 而在此方法中
+当前对象是完全有可能重新建立GC Roots的 所以 如果在二次确认后对象不满足可回收的条件 那么此对象不会被回收 巧妙地逃过了垃圾回收的命运 比如下面这个例子:
+                    private static Test a;
+
+                    private static class Test{
+
+                        @Override
+                        protected void finalize() throws Throwable {
+                            System.out.println(this + "开始了它的救赎之路");
+                            a = this;
+                        }
+
+                    }
+
+                    public static void main(String[] args) throws InterruptedException {
+
+                        a = new Test();
+                        // 这里之间把a赋值为null 这样前面的对象我们不可能在得到了
+                        a = null;
+                        // 手动申请执行垃圾回收操作(注意: 只是申请 并不一定会执行 但是一般情况都会执行)
+                        System.gc();
+                        // 等垃圾回收一下
+                        Thread.sleep(1000);
+                        // 我们来看看a有没有被回收
+                        System.out.println(a);
+
+                    }
+
+注意finalize()方法并不是在主线程调用的 而是虚拟机自动建立的一个低优先级的Finalizer线程(正是因为优先级比较低 所以前面才需要等待1秒钟)进行处理 我们可以稍微修改一下看看:
+                    @Override
+                    protected void finalize() throws Throwable {
+                        //System.out.println(this + ", 开始了它的救赎之路");
+                        System.out.println(Thread.currentThread());
+                        a = this;
+                    }
+
+                    Thread[Finalizer,8,system]
+                    com.test1.Main$Test@1b6d3586
+
+同时 同一个对象的finalize()方法只会有一次调用机会 也就是说 如果我们连续两次这样操作 那么第二次 对象必定会被回收:
+                    public static void main(String[] args) throws InterruptedException {
+
+                            a = new Test();
+                            a = null;
+                            System.gc();
+                            Thread.sleep(1000);
+                            System.out.println(a);
+
+                            a = null;
+                            System.gc();
+                            Thread.sleep(1000);
+                            System.out.println(a);
+
+                        }
+
+当然 finalize()方法也并不是专门防止对象被回收的 我们可以使用它来释放一些程序使用中的资源等
+
+最后 总结一下:
+
+                    (不存在任何GC Roots了)
+                             |                                                                                                                (二次标记)
+                             | 可以回收(一次标记)                                                             |<--------------------------------摆烂 啊对对对---------------------------|
+                             |                                                                             |                                                                       |
+                      废物对象(即将被回收) ------------由于此类重写了finalize方法并且还未执行------------> 暂时进入F-Queue队列 -------------只存在一次标记 开始执行finalize方法 ----->-------> 选择躺平
+                             |                                                            (之后会创建一个Finalizer线程处理此方法)                                          |
+                             |                                                                             |                                                          |---
+                             |                                                                             |                                                             |
+                             |                                                                         存在两次标记                                                        |
+                             |                                                              (你不卷别人卷 你看别人比你更卷 放弃吧)                                          开始内卷
+                             |                                                                             |                                                     (比如重新建立引用)
+                             |                                                                             |                                                             |
+                             |-------------1. 已经执行过finalize方法(不能反复内卷 肝受不了了)-------------> 被java世界淘汰                                                被移出F-Queue队列
+                                           2. 没有重写finalize方法(一开始就想摆烂)                           垃圾回收                                                          |
+                                                                                                                                                                     我不是废物
+                                                                                                                                                                    (没有被回收)
+
+当然 除了堆中的对象以外 方法区中的数据也是可以被垃圾回收的 但是回收条件比较严格 这里就暂时不谈了
